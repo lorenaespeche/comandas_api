@@ -20,11 +20,11 @@ class ProdutoResponse(BaseModel):
     id: int
     nome: str
     descricao: str
-    foto: bytes
+    foto: Optional[bytes] = None
     valor_unitario: float
 
 class ProdutoPublicResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     nome: str
     descricao: str
-    foto: bytes
+    foto: Optional[bytes] = None
