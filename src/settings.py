@@ -35,3 +35,9 @@ elif DB_SGDB == 'mssql': # SQL Server
 
 else: # SQLite
     STR_DATABASE = f"sqlite:///apiDatabase.db"
+
+# configurações JWT
+SECRET_KEY = os.getenv("SECRET_KEY", "03f011ec1fc4f6d21b37533d1e67acf18645278016ad779536f588dda6771b50")
+ALGORITHM = os.getenv("ALGORITHM", "HS256")
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
+REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
