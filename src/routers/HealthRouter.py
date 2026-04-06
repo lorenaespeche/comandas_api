@@ -1,3 +1,5 @@
+# Lorena Espeche
+
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import text
 from datetime import datetime, timezone
@@ -7,8 +9,13 @@ from infra.orm.FuncionarioModel import FuncionarioDB
 
 router = APIRouter()
 
+
 # Health check básico - Verificação básica de saúde da API - Usado por load balancers e orquestradores
-@router.get("/health", tags=["Health"], summary="Health check básico - Verificação básica de saúde da API - Usado por load balancers e orquestradores")
+@router.get(
+    "/health",
+    tags=["Health"],
+    summary="Health check básico - Verificação básica de saúde da API - Usado por load balancers e orquestradores"
+)
 async def health_check():
     return {
         "status": "healthy",
@@ -17,12 +24,17 @@ async def health_check():
         "version": "1.0.0"
     }
 
+
 # Health check do banco de dados - Verifica conexão com banco de dados - Testa se consegue executar query simples
-@router.get("/health/database", tags=["Health"], summary="Health check do banco de dados - Verifica conexão com banco de dados - Testa se consegue executar query simples")
+@router.get(
+    "/health/database",
+    tags=["Health"],
+    summary="Health check do banco de dados - Verifica conexão com banco de dados - Testa se consegue executar query simples"
+)
 async def database_health():
+    db = None  # inicializa para evitar erro no finally caso a conexão falhe
     try:
         db = next(get_db())
-        # Query simples para testar conexão
         result = db.execute(text("SELECT 1 as test")).fetchone()
         if result and result[0] == 1:
             return {
@@ -35,24 +47,33 @@ async def database_health():
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Database query failed"
             )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Database unavailable: {str(e)}"
         )
     finally:
-        try:
-            db.close()
-        except:
-            pass
+        if db:
+            try:
+                db.close()
+            except:
+                pass
+
 
 # Health check das tabelas - Verifica se tabelas críticas existem e têm dados
-@router.get("/health/database/tables", tags=["Health"], summary="Health check das tabelas - Verifica se tabelas críticas existem e têm dados")
+@router.get(
+    "/health/database/tables",
+    tags=["Health"],
+    summary="Health check das tabelas - Verifica se tabelas críticas existem e têm dados"
+)
 async def database_tables_health():
+    db = None  # inicializa para evitar erro no finally caso a conexão falhe
     try:
         db = next(get_db())
-        # Verifica tabelas críticas
         checks = {}
+
         # Verifica tabela funcionário
         try:
             count = db.query(FuncionarioDB).count()
@@ -65,29 +86,39 @@ async def database_tables_health():
                 "status": "error",
                 "error": str(e)
             }
-        # Verifica se todas estão healthy
+
         all_healthy = all(
             check["status"] == "healthy"
             for check in checks.values()
         )
+
         return {
             "status": "healthy" if all_healthy else "unhealthy",
             "tables": checks,
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Database tables check failed: {str(e)}"
         )
     finally:
-        try:
-            db.close()
-        except:
-            pass
+        if db:
+            try:
+                db.close()
+            except:
+                pass
+
 
 # Health check do sistema - Verifica recursos do sistema (memória, disco, CPU)
-@router.get("/health/system", tags=["Health"], summary="Health check do sistema - Verifica recursos do sistema (memória, disco, CPU)")
+@router.get(
+    "/health/system",
+    tags=["Health"],
+    summary="Health check do sistema - Verifica recursos do sistema (memória, disco, CPU)"
+)
 async def system_health():
     try:
         # Informações de memória
@@ -99,8 +130,9 @@ async def system_health():
             "used": memory.used,
             "status": "healthy" if memory.percent < 90 else "warning"
         }
+
         # Informações de disco
-        disk = psutil.disk_usage('.') # Diretório atual em vez de raiz
+        disk = psutil.disk_usage('.')
         disk_info = {
             "total": disk.total,
             "used": disk.used,
@@ -108,6 +140,7 @@ async def system_health():
             "percent": (disk.used / disk.total) * 100,
             "status": "healthy" if (disk.used / disk.total) * 100 < 90 else "warning"
         }
+
         # Informações de CPU
         cpu_percent = psutil.cpu_percent(interval=1)
         cpu_info = {
@@ -115,12 +148,13 @@ async def system_health():
             "count": psutil.cpu_count(),
             "status": "healthy" if cpu_percent < 80 else "warning"
         }
-        # Status geral
+
         all_healthy = all([
             memory_info["status"] == "healthy",
             disk_info["status"] == "healthy",
             cpu_info["status"] == "healthy"
         ])
+
         return {
             "status": "healthy" if all_healthy else "warning",
             "memory": memory_info,
@@ -128,72 +162,120 @@ async def system_health():
             "cpu": cpu_info,
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"System health check failed: {str(e)}"
         )
 
+
 # Health check completo - Verificação completa de todos os componentes
-@router.get("/health/full", tags=["Health"], summary="Health check completo - Verificação completa de todos os componentes")
+@router.get(
+    "/health/full",
+    tags=["Health"],
+    summary="Health check completo - Verificação completa de todos os componentes"
+)
 async def full_health_check():
     try:
-        # Coleta todos os health checks
         checks = {}
+
         # API Status
         checks["api"] = {"status": "healthy", "message": "API responding"}
+
         # Database Status
+        db = None
         try:
             db = next(get_db())
             db.execute(text("SELECT 1"))
             checks["database"] = {"status": "healthy", "message": "Database connected"}
-            db.close()
         except Exception as e:
             checks["database"] = {"status": "unhealthy", "message": str(e)}
+        finally:
+            if db:
+                try:
+                    db.close()
+                except:
+                    pass
+
         # System Status
         try:
             memory = psutil.virtual_memory()
-            disk = psutil.disk_usage('.') # Diretório atual
+            disk = psutil.disk_usage('.')
             cpu = psutil.cpu_percent(interval=1)
-            system_healthy = (memory.percent < 90 and (disk.used / disk.total) * 100 < 90 and cpu < 80)
-            checks["system"] = {"status": "healthy" if system_healthy else "warning", "memory_percent": memory.percent, "disk_percent": (disk.used / disk.total) * 100, "cpu_percent": cpu}
+            system_healthy = (
+                memory.percent < 90 and
+                (disk.used / disk.total) * 100 < 90 and
+                cpu < 80
+            )
+            checks["system"] = {
+                "status": "healthy" if system_healthy else "warning",
+                "memory_percent": memory.percent,
+                "disk_percent": (disk.used / disk.total) * 100,
+                "cpu_percent": cpu
+            }
         except Exception as e:
             checks["system"] = {"status": "error", "message": str(e)}
+
         # Status geral
         overall_status = "healthy"
         for check in checks.values():
-            if check["status"] == "unhealthy":
+            if check["status"] in ("unhealthy", "error"):
                 overall_status = "unhealthy"
                 break
             elif check["status"] == "warning" and overall_status == "healthy":
                 overall_status = "warning"
-            elif check["status"] == "error":
-                overall_status = "unhealthy"
-                break
-        return {"status": overall_status, "checks": checks, "timestamp": datetime.now(timezone.utc).isoformat(), "service": "comandas-api", "version": "1.0.0"}
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Full health check failed: {str(e)}")
 
-# Readiness probe - Verifica se API está pronta para receber tráfego - Similar ao health mas pode incluir verificações adicionais
-@router.get("/ready", tags=["Health"], summary="Readiness probe - Verifica se API está pronta para receber tráfego - Similar ao health mas pode incluir verificações adicionais")
+        return {
+            "status": overall_status,
+            "checks": checks,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "service": "comandas-api",
+            "version": "1.0.0"
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Full health check failed: {str(e)}"
+        )
+
+
+# Readiness probe - Verifica se API está pronta para receber tráfego
+@router.get(
+    "/ready",
+    tags=["Health"],
+    summary="Readiness probe - Verifica se API está pronta para receber tráfego - Similar ao health mas pode incluir verificações adicionais"
+)
 async def readiness_check():
-    # Verifica se banco está acessível
+    db = None
     try:
         db = next(get_db())
         db.execute(text("SELECT 1"))
-        db.close()
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Service not ready - database unavailable: {str(e)}"
         )
+    finally:
+        if db:
+            try:
+                db.close()
+            except:
+                pass
+
     return {
         "status": "ready",
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
 
+
 # Liveness probe - Verifica se API está viva (não travada) - Usado por Kubernetes para reiniciar containers travados
-@router.get("/live", tags=["Health"], summary="Liveness probe - Verifica se API está viva (não travada) - Usado por Kubernetes para reiniciar containers travados")
+@router.get(
+    "/live",
+    tags=["Health"],
+    summary="Liveness probe - Verifica se API está viva (não travada) - Usado por Kubernetes para reiniciar containers travados"
+)
 async def liveness_check():
     return {
         "status": "alive",
