@@ -1,0 +1,57 @@
+services:
+
+  db:
+    image: mysql:8
+    container_name: mysql_comandas_api
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASS}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASS}
+    ports:
+      - "${DB_PORT}:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$DB_PASS"]
+      timeout: 20s
+      retries: 10
+      interval: 10s
+      start_period: 40s
+    networks:
+      - comandas_network
+
+  comandas_api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: espeche/comandas-api:latest
+    container_name: comandas_api
+    depends_on:
+      db:
+        condition: service_healthy
+        restart: true
+    env_file:
+      - ./.env
+    ports:
+      - "${PORT}:4443/tcp"
+      - "${PORT}:4443/udp"
+    volumes:
+      - ./cert:/cert:ro
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - comandas_network
+
+volumes:
+  db_data:
+    driver: local
+
+networks:
+  comandas_network:
+    name: comandas_network_prod
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
